@@ -55,7 +55,7 @@ Data is polled from Pleos every 15 minutes.
 
 | Platform | Entities |
 |---|---|
-| Sensor | VIN, odometer, fuel level and fuel range (petrol and hybrid cars only), fuel economy (last tank and average), EV range, EV battery level, electric economy (last charge and average), estimated charge duration, charge target (AC and DC), outside and set temperature, tyre pressure (four wheels), last updated, location last updated |
+| Sensor | VIN, odometer, fuel level and fuel range (petrol and hybrid cars only), fuel economy (last tank, today and average), EV range, EV battery level, electric economy (last charge, today and average), estimated charge duration, charge target (AC and DC), outside and set temperature, tyre pressure (four wheels), last updated, location last updated |
 | Binary sensor | Locked (on = unlocked), per-door lock and open states, bonnet, boot, sunroof, EV charging, plugged in, engine (ignition), air conditioner, defrost, steering wheel heater, seat heaters, and the warning lights Pleos reports (low fuel, smart key battery, washer fluid, brake fluid, oil level, tyre pressure, headlamp, rear lamp and turn signal faults) |
 | Device tracker | Location (GPS) |
 
@@ -63,21 +63,23 @@ Some values are only available for some models. A sensor can show "unknown" if P
 
 **Units.** The distance sensors — odometer, fuel range and EV range — show the unit your car reports (for example, miles in the UK), rather than Home Assistant converting them to your configured length unit. This keeps them matching the car's own display.
 
-**Fuel economy.** Pleos does not report fuel economy, so the integration works it out from the odometer and the fuel level: the distance driven between updates, and the fuel used, taken from how far the level has fallen and your tank capacity. Two sensors are provided:
+**Fuel economy.** Pleos does not report fuel economy, so the integration works it out from the odometer and the fuel level: the distance driven between updates, and the fuel used, taken from how far the level has fallen and your tank capacity. Three sensors are provided:
 
 - **Fuel Economy (Last Tank)** — restarts at each refill, so it reports the tank you are on now.
+- **Fuel Economy (Today)** — restarts at midnight (Home Assistant's time zone), so it reports today's driving.
 - **Fuel Economy (Average)** — everything driven since the integration first started tracking.
 
-They read **mpg** (UK gallons) for a car that displays miles, and **L/100km** for a car that displays kilometres. Both begin as "unknown" and fill in once the car has uploaded a change in both the odometer and the fuel level. The fuel level is a whole percentage and the car only uploads occasionally, so a single tank takes a while to settle; the average is the steadier figure. On a plug-in hybrid this is petrol economy only — electric miles push it up, because electricity is not counted.
+They read **mpg** (UK gallons) for a car that displays miles, and **L/100km** for a car that displays kilometres. They begin as "unknown" and fill in once the car has uploaded a change in both the odometer and the fuel level. The fuel level is a whole percentage and the car only uploads occasionally, so a single tank takes a while to settle; the average is the steadier figure. The daily figure is the roughest: 1% of a 42 L tank is 0.42 L, so a short day's drive can be well off. It goes back to "unknown" at midnight, and driving counts on the day the car uploaded it. On a plug-in hybrid this is petrol economy only — electric miles push it up, because electricity is not counted.
 
 Change the tank and battery capacities with the entry's **Configure** button. A corrected value affects the figures from that point on, not the ones already accumulated.
 
-**Electric economy.** Pleos does not report electric economy either, so it is worked out the same way as fuel economy but from the odometer and the battery level: the distance driven between updates, and the energy used, taken from how far the state of charge has fallen and your battery capacity. Two sensors are provided:
+**Electric economy.** Pleos does not report electric economy either, so it is worked out the same way as fuel economy but from the odometer and the battery level: the distance driven between updates, and the energy used, taken from how far the state of charge has fallen and your battery capacity. Three sensors are provided:
 
 - **EV Economy (Last Charge)** — restarts at each recharge, so it reports the charge you are on now.
+- **EV Economy (Today)** — restarts at midnight (Home Assistant's time zone), so it reports today's driving.
 - **EV Economy (Average)** — everything driven since the integration first started tracking.
 
-They read **mi/kWh** for a car that displays miles, and **kWh/100km** for a car that displays kilometres. Both begin as "unknown" and fill in once the car has uploaded a change in both the odometer and the battery level. On a plug-in hybrid this is electric economy only — petrol miles push it up, because fuel is not counted. A pure EV has no fuel level, so its fuel economy sensors stay "unknown" while the electric ones work normally.
+They read **mi/kWh** for a car that displays miles, and **kWh/100km** for a car that displays kilometres. They begin as "unknown" and fill in once the car has uploaded a change in both the odometer and the battery level. The daily figure is the roughest, for the same reason as fuel: 1% of a 60 kWh battery is 0.6 kWh. It goes back to "unknown" at midnight, and driving counts on the day the car uploaded it. On a plug-in hybrid this is electric economy only — petrol miles push it up, because fuel is not counted. A pure EV has no fuel level, so its fuel economy sensors stay "unknown" while the electric ones work normally.
 
 ## Services
 

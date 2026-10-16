@@ -48,9 +48,11 @@ LITRES_PER_UK_GALLON = 4.54609
 # economy sensors to read.
 KEY_FUEL_ECONOMY = "fuel_economy"
 KEY_FUEL_ECONOMY_AVERAGE = "fuel_economy_average"
+KEY_FUEL_ECONOMY_TODAY = "fuel_economy_today"
 KEY_FUEL_ECONOMY_UNIT = "fuel_economy_unit"
 KEY_ELECTRIC_ECONOMY = "electric_economy"
 KEY_ELECTRIC_ECONOMY_AVERAGE = "electric_economy_average"
+KEY_ELECTRIC_ECONOMY_TODAY = "electric_economy_today"
 KEY_ELECTRIC_ECONOMY_UNIT = "electric_economy_unit"
 
 # When the coordinator last fetched this vehicle's data from Pleos.
