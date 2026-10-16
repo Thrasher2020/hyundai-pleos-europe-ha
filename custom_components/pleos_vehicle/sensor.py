@@ -21,20 +21,28 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.util import dt as dt_util
 
 from .const import (
     KEY_ELECTRIC_ECONOMY,
     KEY_ELECTRIC_ECONOMY_AVERAGE,
+    KEY_ELECTRIC_ECONOMY_TODAY,
     KEY_ELECTRIC_ECONOMY_UNIT,
     KEY_FUEL_ECONOMY,
     KEY_FUEL_ECONOMY_AVERAGE,
+    KEY_FUEL_ECONOMY_TODAY,
     KEY_FUEL_ECONOMY_UNIT,
     KEY_LAST_POLLED,
 )
 from .coordinator import PleosConfigEntry, PleosVehicleCoordinator
 from .entity import PleosVehicleEntity
-from .readings import LENGTH_UNITS, dig, length_unit, odometer
+from .readings import (
+    LENGTH_UNITS,
+    dig,
+    last_updated,
+    length_unit,
+    odometer,
+    timestamp,
+)
 
 TEMPERATURE_UNITS = {
     "C": UnitOfTemperature.CELSIUS,
@@ -45,7 +53,6 @@ PRESSURE_UNITS = {
     "kpa": UnitOfPressure.KPA,
     "bar": UnitOfPressure.BAR,
 }
-TIMESTAMP_BLOCKS = ("batteries", "driving", "powertrains", "status", "locations")
 ATTR_LAST_KNOWN_AT = "last_known_at"
 
 
@@ -58,16 +65,6 @@ class PleosSensorEntityDescription(SensorEntityDescription):
     # Pleos sometimes sends a dash instead of a range. Keep the last number
     # received, and say when it was received, rather than going unknown.
     keep_last_known: bool = False
-
-
-def _timestamp(value: Any) -> datetime | None:
-    return dt_util.parse_datetime(value) if isinstance(value, str) else None
-
-
-def _last_updated(data: dict[str, Any]) -> datetime | None:
-    stamps = [_timestamp(dig(data, name, "timestamp")) for name in TIMESTAMP_BLOCKS]
-    known = [stamp for stamp in stamps if stamp is not None]
-    return max(known) if known else None
 
 
 def _range_entries(data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -225,6 +222,16 @@ SENSORS: tuple[PleosSensorEntityDescription, ...] = (
         unit_fn=lambda data: data.get(KEY_FUEL_ECONOMY_UNIT),
     ),
     PleosSensorEntityDescription(
+        key="fuel_economy_today",
+        translation_key="fuel_economy_today",
+        # Restarts at local midnight, so it covers the driving the car has
+        # uploaded today.
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=lambda data: data.get(KEY_FUEL_ECONOMY_TODAY),
+        unit_fn=lambda data: data.get(KEY_FUEL_ECONOMY_UNIT),
+    ),
+    PleosSensorEntityDescription(
         key="ev_economy",
         translation_key="ev_economy",
         # Worked out by the coordinator from the odometer and the battery level,
@@ -243,6 +250,16 @@ SENSORS: tuple[PleosSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
         value_fn=lambda data: data.get(KEY_ELECTRIC_ECONOMY_AVERAGE),
+        unit_fn=lambda data: data.get(KEY_ELECTRIC_ECONOMY_UNIT),
+    ),
+    PleosSensorEntityDescription(
+        key="ev_economy_today",
+        translation_key="ev_economy_today",
+        # Restarts at local midnight, so it covers the driving the car has
+        # uploaded today.
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=lambda data: data.get(KEY_ELECTRIC_ECONOMY_TODAY),
         unit_fn=lambda data: data.get(KEY_ELECTRIC_ECONOMY_UNIT),
     ),
     PleosSensorEntityDescription(
@@ -347,13 +364,13 @@ SENSORS: tuple[PleosSensorEntityDescription, ...] = (
         key="last_updated_at",
         translation_key="last_updated_at",
         device_class=SensorDeviceClass.TIMESTAMP,
-        value_fn=_last_updated,
+        value_fn=last_updated,
     ),
     PleosSensorEntityDescription(
         key="location_last_updated_at",
         translation_key="location_last_updated_at",
         device_class=SensorDeviceClass.TIMESTAMP,
-        value_fn=lambda data: _timestamp(dig(data, "locations", "timestamp")),
+        value_fn=lambda data: timestamp(dig(data, "locations", "timestamp")),
     ),
 )
 
@@ -383,7 +400,7 @@ class PleosVehicleSensor(PleosVehicleEntity, RestoreSensor):
         state = await self.async_get_last_state()
         if restored is None or restored.native_value is None:
             return
-        seen = _timestamp(state.attributes.get(ATTR_LAST_KNOWN_AT)) if state else None
+        seen = timestamp(state.attributes.get(ATTR_LAST_KNOWN_AT)) if state else None
         self._known = (
             restored.native_value,
             restored.native_unit_of_measurement,
