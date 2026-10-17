@@ -336,6 +336,11 @@ SENSORS: tuple[PleosSensorEntityDescription, ...] = (
         unit_fn=_tire_unit(1),
     ),
     PleosSensorEntityDescription(
+        key="geocoded_location",
+        translation_key="geocoded_location",
+        value_fn=lambda data: dig(data, "geocode", "display_name"),
+    ),
+    PleosSensorEntityDescription(
         key="last_polled_at",
         translation_key="last_polled_at",
         # When Home Assistant last fetched the data from Pleos. Distinct from
@@ -422,13 +427,52 @@ class PleosVehicleSensor(PleosVehicleEntity, RestoreSensor):
         return self._read()[1]
 
     @property
-    def extra_state_attributes(self) -> dict[str, str] | None:
-        """Say when a kept range was last received from Pleos."""
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return additional sensor attributes."""
+        if self.entity_description.key == "geocoded_location":
+            if self.vehicle_data is None:
+                return None
+
+            geocode = self.vehicle_data.get("geocode")
+            if not isinstance(geocode, dict):
+                return None
+
+            address = geocode.get("address", {})
+            if not isinstance(address, dict):
+                address = {}
+
+            return {
+                "latitude": dig(
+                    self.vehicle_data,
+                    "locations",
+                    "location",
+                    "latitude",
+                ),
+                "longitude": dig(
+                    self.vehicle_data,
+                    "locations",
+                    "location",
+                    "longitude",
+                ),
+                "road": address.get("road"),
+                "house_number": address.get("house_number"),
+                "postcode": address.get("postcode"),
+                "city": (
+                    address.get("city")
+                    or address.get("town")
+                    or address.get("village")
+                    or address.get("municipality")
+                ),
+                "country": address.get("country"),
+            }
+
         if not self.entity_description.keep_last_known or self._known is None:
             return None
+
         seen = self._known[2]
         if seen is None:
             return None
+
         return {ATTR_LAST_KNOWN_AT: seen.isoformat()}
 
 

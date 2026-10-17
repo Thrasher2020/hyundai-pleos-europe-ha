@@ -125,6 +125,9 @@
       },
       "location_last_updated_at": {
         "name": "Location Last Updated"
+      },
+      "geocoded_location": {
+        "name": "Geocoded Location"
       }
     },
     "binary_sensor": {

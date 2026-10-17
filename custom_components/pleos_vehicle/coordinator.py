@@ -17,6 +17,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util.unit_conversion import DistanceConverter
 
 from .api import PleosAuthError, PleosClient, PleosError
+from .geocode import async_reverse_geocode
 from .const import (
     CONF_BATTERY_CAPACITY,
     CONF_TANK_CAPACITY,
@@ -138,6 +139,12 @@ class PleosVehicleCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self._fuel_economy: dict[str, EconomyState] = {}
         self._electric_economy: dict[str, EconomyState] = {}
         self._last_good: dict[str, dict[str, Any]] = {}
+
+        # Reverse-geocoded vehicle locations. Coordinates are cached so
+        # Nominatim is only queried when the vehicle reports a new position.
+        self._geocoded_locations: dict[str, dict[str, Any]] = {}
+        self._geocoded_coordinates: dict[str, tuple[float, float]] = {}
+
         self._store = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{config_entry.entry_id}")
 
     async def async_load_fuel_economy(self) -> None:
@@ -187,6 +194,9 @@ class PleosVehicleCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                     "vin": vin,
                     KEY_LAST_POLLED: datetime.now(UTC),
                 }
+
+                await self._async_update_geocode(vin, data[vin])
+
                 self._last_good[vin] = data[vin]
                 updated = self._update_fuel_economy(vin, data[vin]) or updated
                 updated = self._update_electric_economy(vin, data[vin]) or updated
@@ -218,6 +228,52 @@ class PleosVehicleCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             self.client.reset_token()
             await asyncio.sleep(RETRY_DELAY_SECONDS)
             return await self.client.async_get_vehicle_data(vin)
+
+    async def _async_update_geocode(
+        self,
+        vin: str,
+        data: dict[str, Any],
+    ) -> None:
+        """Reverse geocode the vehicle location when it changes."""
+        latitude = dig(data, "locations", "location", "latitude")
+        longitude = dig(data, "locations", "location", "longitude")
+
+        if not isinstance(latitude, (int, float)) or isinstance(latitude, bool):
+            return
+        if not isinstance(longitude, (int, float)) or isinstance(longitude, bool):
+            return
+
+        # Five decimal places are roughly metre-level precision and avoid
+        # repeated lookups caused only by tiny GPS jitter.
+        coordinates = (
+            round(float(latitude), 5),
+            round(float(longitude), 5),
+        )
+
+        # Reuse the existing geocode when the position has not changed.
+        if self._geocoded_coordinates.get(vin) == coordinates:
+            geocode = self._geocoded_locations.get(vin)
+            if geocode is not None:
+                data["geocode"] = geocode
+            return
+
+        result = await async_reverse_geocode(
+            self.hass,
+            coordinates[0],
+            coordinates[1],
+        )
+
+        if result is None:
+            # A Nominatim problem must not break Pleos. Keep the previous
+            # address, if one exists, and try again on a later update.
+            geocode = self._geocoded_locations.get(vin)
+            if geocode is not None:
+                data["geocode"] = geocode
+            return
+
+        self._geocoded_coordinates[vin] = coordinates
+        self._geocoded_locations[vin] = result
+        data["geocode"] = result
 
     def _update_fuel_economy(self, vin: str, data: dict[str, Any]) -> bool:
         """Add the fuel economy figures to one vehicle's data.
