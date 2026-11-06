@@ -56,12 +56,14 @@ Data is polled from Pleos every 15 minutes.
 | Platform | Entities |
 |---|---|
 | Sensor | VIN, odometer, fuel level and fuel range (petrol and hybrid cars only), fuel economy (last tank, today and average), EV range, EV battery level, electric economy (last charge, today and average), estimated charge duration, charge target (AC and DC), outside and set temperature, tyre pressure (four wheels), last updated, location last updated, geocoded location |
-| Binary sensor | Locked (on = unlocked), per-door lock and open states, bonnet, boot, sunroof, EV charging, plugged in, engine (ignition), air conditioner, defrost, steering wheel heater, seat heaters, and the warning lights Pleos reports (low fuel, smart key battery, washer fluid, brake fluid, oil level, tyre pressure, headlamp, rear lamp and turn signal faults) |
+| Binary sensor | Locked (on = unlocked), per-door lock and open states, bonnet, boot, sunroof, EV charging, EV charging (estimated, optional), plugged in, engine (ignition), air conditioner, defrost, steering wheel heater, seat heaters, and the warning lights Pleos reports (low fuel, smart key battery, washer fluid, brake fluid, oil level, tyre pressure, headlamp, rear lamp and turn signal faults) |
 | Device tracker | Location (GPS) |
 
 Some values are only available for some models. A sensor can show "unknown" if Pleos doesn't return that field for your car.
 
 **Geocoded location.** The Geocoded Location sensor turns the car's GPS position into a street address using OpenStreetMap's Nominatim service. Its attributes give the latitude and longitude, road, house number, postcode, city and country. The address is only looked up again when the car's position changes, and a failed lookup doesn't stop the other Pleos data from updating. Each lookup sends the car's coordinates to Nominatim, which is run by OpenStreetMap, not Pleos. To stop this, disable the sensor in Home Assistant.
+
+**Estimated charging.** Pleos's charging flag is not always set while a car is charging. The EV Charging (Estimated) sensor is an alternative that follows the battery level instead. It is on while the car is plugged in and the battery level is rising, and off when the level falls, the battery reaches 100%, or the car is unplugged. It is an estimate, and it updates with each 15-minute poll. It is off by default. To turn it on, open the entry's **Configure** button and tick **Estimate charging from battery level**. Turning it off removes the sensor.
 
 **Units.** The distance sensors — odometer, fuel range and EV range — show the unit your car reports (for example, miles in the UK), rather than Home Assistant converting them to your configured length unit. This keeps them matching the car's own display.
 
