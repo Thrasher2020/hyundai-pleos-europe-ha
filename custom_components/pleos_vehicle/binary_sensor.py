@@ -11,10 +11,17 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.const import Platform
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .coordinator import PleosConfigEntry, PleosVehicleCoordinator
+from .const import DOMAIN, KEY_EV_CHARGING_ESTIMATED
+from .coordinator import (
+    PleosConfigEntry,
+    PleosVehicleCoordinator,
+    estimated_charging_from_entry,
+)
 from .entity import PleosVehicleEntity, dig
 
 
@@ -302,6 +309,14 @@ BINARY_SENSORS: tuple[PleosBinarySensorEntityDescription, ...] = (
 )
 
 
+ESTIMATED_CHARGING_SENSOR = PleosBinarySensorEntityDescription(
+    key="ev_battery_is_charging_estimated",
+    translation_key="ev_battery_is_charging_estimated",
+    device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
+    value_fn=lambda data: data.get(KEY_EV_CHARGING_ESTIMATED),
+)
+
+
 class PleosVehicleBinarySensor(PleosVehicleEntity, BinarySensorEntity):
     """A binary sensor backed by Pleos vehicle data."""
 
@@ -324,6 +339,22 @@ class PleosVehicleBinarySensor(PleosVehicleEntity, BinarySensorEntity):
         return self.entity_description.value_fn(self.vehicle_data)
 
 
+@callback
+def _async_remove_estimated_charging(
+    hass: HomeAssistant, coordinator: PleosVehicleCoordinator
+) -> None:
+    """Remove the estimated charging sensor from the registry when it is off."""
+    registry = er.async_get(hass)
+    for vin in coordinator.vehicles:
+        entity_id = registry.async_get_entity_id(
+            Platform.BINARY_SENSOR,
+            DOMAIN,
+            f"{vin}_{ESTIMATED_CHARGING_SENSOR.key}",
+        )
+        if entity_id is not None:
+            registry.async_remove(entity_id)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: PleosConfigEntry,
@@ -331,8 +362,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up Pleos binary sensors."""
     coordinator = entry.runtime_data
+    descriptions = list(BINARY_SENSORS)
+    if estimated_charging_from_entry(entry):
+        descriptions.append(ESTIMATED_CHARGING_SENSOR)
+    else:
+        _async_remove_estimated_charging(hass, coordinator)
     async_add_entities(
         PleosVehicleBinarySensor(coordinator, vin, description)
         for vin in coordinator.vehicles
-        for description in BINARY_SENSORS
+        for description in descriptions
     )
