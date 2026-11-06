@@ -29,6 +29,7 @@
     "error": {
       "invalid_auth": "Client ID or client secret rejected.",
       "cannot_connect": "Could not reach the Pleos API.",
+      "token_failed": "Pleos would not issue a token for this key. Check the brand and key in Pleos Playground, then try again.",
       "no_vehicles": "No vehicles are shared with this API key."
     },
     "abort": {
