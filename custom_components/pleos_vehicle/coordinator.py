@@ -21,6 +21,7 @@ from .api import PleosAuthError, PleosClient, PleosError
 from .geocode import async_reverse_geocode
 from .const import (
     CONF_BATTERY_CAPACITY,
+    CONF_ESTIMATED_CHARGING,
     CONF_TANK_CAPACITY,
     DEFAULT_BATTERY_CAPACITY,
     DEFAULT_TANK_CAPACITY,
@@ -29,6 +30,7 @@ from .const import (
     KEY_ELECTRIC_ECONOMY_AVERAGE,
     KEY_ELECTRIC_ECONOMY_TODAY,
     KEY_ELECTRIC_ECONOMY_UNIT,
+    KEY_EV_CHARGING_ESTIMATED,
     KEY_FUEL_ECONOMY,
     KEY_FUEL_ECONOMY_AVERAGE,
     KEY_FUEL_ECONOMY_TODAY,
@@ -54,6 +56,9 @@ _LOGGER = logging.getLogger(__name__)
 # Pause before retrying a vehicle that Pleos refused, so a brief server
 # problem has a moment to clear.
 RETRY_DELAY_SECONDS = 5
+
+# A battery at or above this level is full, so it is no longer charging.
+FULL_BATTERY_LEVEL = 100.0
 
 # Fuel economy follows the car's own unit: miles per UK gallon for a car
 # showing miles, litres per 100 km for one showing kilometres.
@@ -86,6 +91,11 @@ def tank_capacity_from_entry(entry: ConfigEntry) -> float:
 def battery_capacity_from_entry(entry: ConfigEntry) -> float:
     """Return the configured battery size in kilowatt-hours."""
     return capacity_from_entry(entry, CONF_BATTERY_CAPACITY, DEFAULT_BATTERY_CAPACITY)
+
+
+def estimated_charging_from_entry(entry: ConfigEntry) -> bool:
+    """Return whether the estimated charging sensor is turned on."""
+    return bool(entry.options.get(CONF_ESTIMATED_CHARGING, False))
 
 
 def fuel_economy_value(distance: float, litres: float, unit: str | None) -> float | None:
@@ -138,6 +148,8 @@ class EconomyState:
     today: str | None = None
     today_distance: float = 0.0
     today_energy: float = 0.0
+    # Whether the car was charging at the last update, from the battery level.
+    charging: bool = False
 
 
 class PleosVehicleCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
@@ -350,6 +362,9 @@ class PleosVehicleCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
         current_odometer = odometer(data)
         current_level = battery_level(data)
+        data[KEY_EV_CHARGING_ESTIMATED] = self._estimate_charging(
+            state, data, current_level
+        )
         if current_odometer is not None and current_level is not None:
             self._fold(
                 state,
@@ -369,6 +384,28 @@ class PleosVehicleCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             state.today_distance, state.today_energy, unit
         )
         return current_odometer is not None and current_level is not None
+
+    def _estimate_charging(
+        self,
+        state: EconomyState,
+        data: dict[str, Any],
+        level: float | None,
+    ) -> bool:
+        """Estimate whether the car is charging, from the plug and the battery level.
+
+        Pleos's own charging flag is not always set while a car charges, so this
+        follows the battery level instead: plugged in and rising means charging.
+        It is compared with the previous reading, so call it before the reading
+        is folded in.
+        """
+        if dig(data, "batteries", "charge", "plugin") != "connected":
+            state.charging = False
+        elif level is not None and state.last_level is not None:
+            if level >= FULL_BATTERY_LEVEL or level < state.last_level:
+                state.charging = False
+            elif level > state.last_level:
+                state.charging = True
+        return state.charging
 
     def _start_day(self, state: EconomyState) -> str:
         """Zero the day's totals once a new local day has begun.
