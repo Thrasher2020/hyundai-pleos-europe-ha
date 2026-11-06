@@ -16,6 +16,7 @@ from homeassistant.const import UnitOfEnergy, UnitOfVolume
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -35,6 +36,7 @@ from .const import (
     CONF_BRAND,
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
+    CONF_ESTIMATED_CHARGING,
     CONF_TANK_CAPACITY,
     CONF_VEHICLES,
     DEFAULT_BATTERY_CAPACITY,
@@ -48,7 +50,11 @@ from .const import (
     BATTERY_CAPACITY_STEP,
     TANK_CAPACITY_STEP,
 )
-from .coordinator import battery_capacity_from_entry, tank_capacity_from_entry
+from .coordinator import (
+    battery_capacity_from_entry,
+    estimated_charging_from_entry,
+    tank_capacity_from_entry,
+)
 
 BRAND_OPTIONS = [
     SelectOptionDict(value=value, label=label) for value, label in BRANDS.items()
@@ -229,6 +235,10 @@ class PleosOptionsFlow(OptionsFlow):
                     CONF_BATTERY_CAPACITY,
                     default=battery_capacity_from_entry(self.config_entry),
                 ): BATTERY_CAPACITY_SELECTOR,
+                vol.Required(
+                    CONF_ESTIMATED_CHARGING,
+                    default=estimated_charging_from_entry(self.config_entry),
+                ): BooleanSelector(),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

@@ -16,6 +16,7 @@ CONF_CLIENT_SECRET = "client_secret"
 CONF_VEHICLES = "vehicles"
 CONF_TANK_CAPACITY = "tank_capacity"
 CONF_BATTERY_CAPACITY = "battery_capacity"
+CONF_ESTIMATED_CHARGING = "estimated_charging"
 
 # The Pleos API reports the fuel level as a percentage and never reports the
 # litres burned, so a tank size is needed to turn a drop in the level into a
@@ -54,6 +55,7 @@ KEY_ELECTRIC_ECONOMY = "electric_economy"
 KEY_ELECTRIC_ECONOMY_AVERAGE = "electric_economy_average"
 KEY_ELECTRIC_ECONOMY_TODAY = "electric_economy_today"
 KEY_ELECTRIC_ECONOMY_UNIT = "electric_economy_unit"
+KEY_EV_CHARGING_ESTIMATED = "ev_charging_estimated"
 
 # When the coordinator last fetched this vehicle's data from Pleos.
 KEY_LAST_POLLED = "last_polled"

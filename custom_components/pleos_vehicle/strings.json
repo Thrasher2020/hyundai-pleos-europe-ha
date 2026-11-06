@@ -44,11 +44,13 @@
         "description": "Change how the Pleos data is interpreted. The integration stays read-only.",
         "data": {
           "tank_capacity": "Fuel tank capacity",
-          "battery_capacity": "Battery capacity"
+          "battery_capacity": "Battery capacity",
+          "estimated_charging": "Estimate charging from battery level"
         },
         "data_description": {
           "tank_capacity": "Used to work out fuel economy, because Pleos reports the fuel level as a percentage and never reports litres burned.",
-          "battery_capacity": "Used to work out electric economy, because Pleos reports the battery state of charge as a percentage and never reports kilowatt-hours used."
+          "battery_capacity": "Used to work out electric economy, because Pleos reports the battery state of charge as a percentage and never reports kilowatt-hours used.",
+          "estimated_charging": "Adds an EV Charging (Estimated) sensor that follows the battery level while the car is plugged in. Pleos's own charging flag is not always set while the car charges."
         }
       }
     }
@@ -176,6 +178,9 @@
       },
       "ev_battery_is_charging": {
         "name": "EV Battery Charge"
+      },
+      "ev_battery_is_charging_estimated": {
+        "name": "EV Charging (Estimated)"
       },
       "ev_battery_is_plugged_in": {
         "name": "EV Battery Plug"
