@@ -24,6 +24,10 @@ class PleosConnectionError(PleosError):
     """The Pleos API could not be reached."""
 
 
+class PleosTokenError(PleosError):
+    """Pleos refused to issue an access token for this key."""
+
+
 def _error_code(body: dict[str, Any]) -> str:
     """Return Pleos's short error code for a log message, if it sent one."""
     error = body.get("error")
@@ -100,7 +104,9 @@ class PleosClient:
             raise PleosAuthError("Client ID or client secret rejected")
         token = (body.get("data") or {}).get("accessToken")
         if status >= 400 or not token:
-            raise PleosError(f"Token request failed with HTTP {status}")
+            raise PleosTokenError(
+                f"Token request failed with HTTP {status}{_error_code(body)}"
+            )
         self._token = token
 
     async def _async_call(
