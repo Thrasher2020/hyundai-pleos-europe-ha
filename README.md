@@ -55,11 +55,13 @@ Data is polled from Pleos every 15 minutes.
 
 | Platform | Entities |
 |---|---|
-| Sensor | VIN, odometer, fuel level and fuel range (petrol and hybrid cars only), fuel economy (last tank, today and average), EV range, EV battery level, electric economy (last charge, today and average), estimated charge duration, charge target (AC and DC), outside and set temperature, tyre pressure (four wheels), last updated, location last updated |
+| Sensor | VIN, odometer, fuel level and fuel range (petrol and hybrid cars only), fuel economy (last tank, today and average), EV range, EV battery level, electric economy (last charge, today and average), estimated charge duration, charge target (AC and DC), outside and set temperature, tyre pressure (four wheels), last updated, location last updated, geocoded location |
 | Binary sensor | Locked (on = unlocked), per-door lock and open states, bonnet, boot, sunroof, EV charging, plugged in, engine (ignition), air conditioner, defrost, steering wheel heater, seat heaters, and the warning lights Pleos reports (low fuel, smart key battery, washer fluid, brake fluid, oil level, tyre pressure, headlamp, rear lamp and turn signal faults) |
 | Device tracker | Location (GPS) |
 
 Some values are only available for some models. A sensor can show "unknown" if Pleos doesn't return that field for your car.
+
+**Geocoded location.** The Geocoded Location sensor turns the car's GPS position into a street address using OpenStreetMap's Nominatim service. Its attributes give the latitude and longitude, road, house number, postcode, city and country. The address is only looked up again when the car's position changes, and a failed lookup doesn't stop the other Pleos data from updating. Each lookup sends the car's coordinates to Nominatim, which is run by OpenStreetMap, not Pleos. To stop this, disable the sensor in Home Assistant.
 
 **Units.** The distance sensors — odometer, fuel range and EV range — show the unit your car reports (for example, miles in the UK), rather than Home Assistant converting them to your configured length unit. This keeps them matching the car's own display.
 
@@ -108,7 +110,7 @@ Entity names follow the vehicle's device name, so an entity named `tucson_ev_bat
 ## Security
 
 - Your Client ID and Client Secret are stored in Home Assistant's config entry. They aren't written to YAML or to this repository.
-- The integration only makes read requests to `https://api.pleos.ai/v1`.
+- The integration only makes read requests to `https://api.pleos.ai/v1`, plus address lookups to `https://nominatim.openstreetmap.org` for the Geocoded Location sensor.
 - Don't post your Client Secret in issues or logs. If it's exposed, reissue the key from Pleos Playground.
 
 ## Before you use it
