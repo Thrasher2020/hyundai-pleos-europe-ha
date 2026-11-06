@@ -28,7 +28,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .api import PleosAuthError, PleosClient, PleosError
+from .api import PleosAuthError, PleosClient, PleosError, PleosTokenError
 from .const import (
     BRANDS,
     CONF_BATTERY_CAPACITY,
@@ -139,6 +139,8 @@ class PleosConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
             except PleosAuthError:
                 errors["base"] = "invalid_auth"
+            except PleosTokenError:
+                errors["base"] = "token_failed"
             except PleosError:
                 errors["base"] = "cannot_connect"
             else:
@@ -193,6 +195,8 @@ class PleosConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
             except PleosAuthError:
                 errors["base"] = "invalid_auth"
+            except PleosTokenError:
+                errors["base"] = "token_failed"
             except PleosError:
                 errors["base"] = "cannot_connect"
             else:
