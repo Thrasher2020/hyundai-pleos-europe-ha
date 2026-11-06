@@ -81,11 +81,17 @@
       "fuel_economy_average": {
         "name": "Fuel Economy (Average)"
       },
+      "fuel_economy_today": {
+        "name": "Fuel Economy (Today)"
+      },
       "ev_economy": {
         "name": "EV Economy (Last Charge)"
       },
       "ev_economy_average": {
         "name": "EV Economy (Average)"
+      },
+      "ev_economy_today": {
+        "name": "EV Economy (Today)"
       },
       "ev_battery_percentage": {
         "name": "EV Battery Level"

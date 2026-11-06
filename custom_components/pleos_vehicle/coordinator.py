@@ -14,6 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import DistanceConverter
 
 from .api import PleosAuthError, PleosClient, PleosError
@@ -25,9 +26,11 @@ from .const import (
     DOMAIN,
     KEY_ELECTRIC_ECONOMY,
     KEY_ELECTRIC_ECONOMY_AVERAGE,
+    KEY_ELECTRIC_ECONOMY_TODAY,
     KEY_ELECTRIC_ECONOMY_UNIT,
     KEY_FUEL_ECONOMY,
     KEY_FUEL_ECONOMY_AVERAGE,
+    KEY_FUEL_ECONOMY_TODAY,
     KEY_FUEL_ECONOMY_UNIT,
     KEY_LAST_POLLED,
     LITRES_PER_UK_GALLON,
@@ -36,7 +39,14 @@ from .const import (
     SCAN_INTERVAL,
     STORAGE_VERSION,
 )
-from .readings import battery_level, dig, fuel_level, length_unit, odometer
+from .readings import (
+    battery_level,
+    dig,
+    fuel_level,
+    last_updated,
+    length_unit,
+    odometer,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -97,6 +107,17 @@ def electric_economy_value(distance: float, kwh: float, unit: str | None) -> flo
     return round(kwh / kilometres * 100, 1)
 
 
+def upload_day(data: dict[str, Any]) -> str | None:
+    """Return the local date the car uploaded this data, as an ISO string.
+
+    Falls back to when it was polled if Pleos sends no timestamp.
+    """
+    uploaded = last_updated(data) or data.get(KEY_LAST_POLLED)
+    if not isinstance(uploaded, datetime):
+        return None
+    return dt_util.as_local(uploaded).date().isoformat()
+
+
 @dataclass
 class EconomyState:
     """Distance driven and energy used, accumulated per vehicle.
@@ -112,6 +133,10 @@ class EconomyState:
     window_energy: float = 0.0
     average_distance: float = 0.0
     average_energy: float = 0.0
+    # The local date (ISO) the today_ totals belong to.
+    today: str | None = None
+    today_distance: float = 0.0
+    today_energy: float = 0.0
 
 
 class PleosVehicleCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
@@ -230,17 +255,27 @@ class PleosVehicleCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         state = self._fuel_economy.setdefault(vin, EconomyState())
         unit = length_unit(data)
         data[KEY_FUEL_ECONOMY_UNIT] = ECONOMY_UNITS.get(unit) if unit else None
+        today = self._start_day(state)
 
         current_odometer = odometer(data)
         current_level = fuel_level(data)
         if current_odometer is not None and current_level is not None:
-            self._fold(state, current_odometer, current_level, self.tank_capacity)
+            self._fold(
+                state,
+                current_odometer,
+                current_level,
+                self.tank_capacity,
+                counts_today=upload_day(data) == today,
+            )
 
         data[KEY_FUEL_ECONOMY] = fuel_economy_value(
             state.window_distance, state.window_energy, unit
         )
         data[KEY_FUEL_ECONOMY_AVERAGE] = fuel_economy_value(
             state.average_distance, state.average_energy, unit
+        )
+        data[KEY_FUEL_ECONOMY_TODAY] = fuel_economy_value(
+            state.today_distance, state.today_energy, unit
         )
         return current_odometer is not None and current_level is not None
 
@@ -255,11 +290,18 @@ class PleosVehicleCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         state = self._electric_economy.setdefault(vin, EconomyState())
         unit = length_unit(data)
         data[KEY_ELECTRIC_ECONOMY_UNIT] = ELECTRIC_ECONOMY_UNITS.get(unit) if unit else None
+        today = self._start_day(state)
 
         current_odometer = odometer(data)
         current_level = battery_level(data)
         if current_odometer is not None and current_level is not None:
-            self._fold(state, current_odometer, current_level, self.battery_capacity)
+            self._fold(
+                state,
+                current_odometer,
+                current_level,
+                self.battery_capacity,
+                counts_today=upload_day(data) == today,
+            )
 
         data[KEY_ELECTRIC_ECONOMY] = electric_economy_value(
             state.window_distance, state.window_energy, unit
@@ -267,7 +309,22 @@ class PleosVehicleCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         data[KEY_ELECTRIC_ECONOMY_AVERAGE] = electric_economy_value(
             state.average_distance, state.average_energy, unit
         )
+        data[KEY_ELECTRIC_ECONOMY_TODAY] = electric_economy_value(
+            state.today_distance, state.today_energy, unit
+        )
         return current_odometer is not None and current_level is not None
+
+    def _start_day(self, state: EconomyState) -> str:
+        """Zero the day's totals once a new local day has begun.
+
+        Returns today's local date as an ISO string.
+        """
+        today = dt_util.now().date().isoformat()
+        if state.today != today:
+            state.today = today
+            state.today_distance = 0.0
+            state.today_energy = 0.0
+        return today
 
     def _fold(
         self,
@@ -275,12 +332,15 @@ class PleosVehicleCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         current_odometer: float,
         current_level: float,
         capacity: float,
+        counts_today: bool,
     ) -> None:
         """Fold one reading into an accumulator.
 
         Most cars only upload occasionally, so a reading can cover many days of
         driving. The level is quantised to one percent, but summing the drops
         telescopes, so a whole window is accurate where a single update is not.
+        An interval counts towards today when the car uploaded it today, so a
+        trip uploaded just before midnight is not put on the next day.
         """
         previous_odometer = state.last_odometer
         previous_level = state.last_level
@@ -300,7 +360,8 @@ class PleosVehicleCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # A rise in the level is a refuel or a recharge. The energy added and
         # the energy burned in the same interval cannot be told apart, so the
         # interval is skipped, and the window starts again from the new
-        # reading. A small rise is rounding noise, and a drop is energy used.
+        # reading. The day carries on. A small rise is rounding noise, and a
+        # drop is energy used.
         if previous_level - current_level <= -LEVEL_RISE:
             state.window_distance = 0.0
             state.window_energy = 0.0
@@ -308,11 +369,15 @@ class PleosVehicleCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
         state.average_distance += distance
         state.window_distance += distance
+        if counts_today:
+            state.today_distance += distance
         level_lost = previous_level - current_level
         if level_lost > 0:
             energy = level_lost / 100 * capacity
             state.average_energy += energy
             state.window_energy += energy
+            if counts_today:
+                state.today_energy += energy
 
 
 type PleosConfigEntry = ConfigEntry[PleosVehicleCoordinator]

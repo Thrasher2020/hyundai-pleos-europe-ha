@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from homeassistant.const import UnitOfLength
+from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import DistanceConverter
 
 LENGTH_UNITS = {
@@ -14,6 +16,7 @@ LENGTH_UNITS = {
     "meter": UnitOfLength.METERS,
     "feet": UnitOfLength.FEET,
 }
+TIMESTAMP_BLOCKS = ("batteries", "driving", "powertrains", "status", "locations")
 
 
 def dig(data: Any, *path: str | int) -> Any:
@@ -24,6 +27,18 @@ def dig(data: Any, *path: str | int) -> Any:
         except (KeyError, IndexError, TypeError):
             return None
     return data
+
+
+def timestamp(value: Any) -> datetime | None:
+    """Return a Pleos timestamp as a datetime, or None if there is none."""
+    return dt_util.parse_datetime(value) if isinstance(value, str) else None
+
+
+def last_updated(data: dict[str, Any]) -> datetime | None:
+    """Return when the car last uploaded, from the newest block timestamp."""
+    stamps = [timestamp(dig(data, name, "timestamp")) for name in TIMESTAMP_BLOCKS]
+    known = [stamp for stamp in stamps if stamp is not None]
+    return max(known) if known else None
 
 
 def length_unit(data: dict[str, Any]) -> str | None:
