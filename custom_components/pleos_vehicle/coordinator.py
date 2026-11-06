@@ -148,6 +148,9 @@ class EconomyState:
     today: str | None = None
     today_distance: float = 0.0
     today_energy: float = 0.0
+    # The level the energy is counted from. It only moves down, so a small rise
+    # cannot add energy back, and a later drop cannot count the same energy twice.
+    level_reference: float | None = None
     # Whether the car was charging at the last update, from the battery level.
     charging: bool = False
 
@@ -436,11 +439,14 @@ class PleosVehicleCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         trip uploaded just before midnight is not put on the next day.
         """
         previous_odometer = state.last_odometer
-        previous_level = state.last_level
+        reference = state.level_reference
+        if reference is None:
+            reference = state.last_level
         state.last_odometer = current_odometer
         state.last_level = current_level
-        if previous_odometer is None or previous_level is None:
+        if previous_odometer is None or reference is None:
             # First reading for this vehicle: nothing to compare against yet.
+            state.level_reference = current_level
             return
 
         distance = current_odometer - previous_odometer
@@ -448,29 +454,34 @@ class PleosVehicleCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # instrument cluster rather than distance driven. Skip the whole
         # interval, and carry on from the new reading.
         if not 0 <= distance <= MAX_ODOMETER_STEP:
+            state.level_reference = current_level
             return
 
-        # A rise in the level is a refuel or a recharge. The energy added and
-        # the energy burned in the same interval cannot be told apart, so the
-        # interval is skipped, and the window starts again from the new
-        # reading. The day carries on. A small rise is rounding noise, and a
-        # drop is energy used.
-        if previous_level - current_level <= -LEVEL_RISE:
+        # A rise of LEVEL_RISE or more is a refuel or a recharge. The energy
+        # added and the energy burned in the same interval cannot be told apart,
+        # so the interval is skipped, and the window starts again from the new
+        # reading. The day carries on.
+        if reference - current_level <= -LEVEL_RISE:
             state.window_distance = 0.0
             state.window_energy = 0.0
+            state.level_reference = current_level
             return
 
         state.average_distance += distance
         state.window_distance += distance
         if counts_today:
             state.today_distance += distance
-        level_lost = previous_level - current_level
-        if level_lost > 0:
-            energy = level_lost / 100 * capacity
+        # Energy is counted from the reference level and the reference only moves
+        # down. A small rise is rounding noise, so it does not add energy back,
+        # and a level that flickers up and down is not counted as used energy.
+        if current_level < reference:
+            energy = (reference - current_level) / 100 * capacity
             state.average_energy += energy
             state.window_energy += energy
             if counts_today:
                 state.today_energy += energy
-
+            state.level_reference = current_level
+        else:
+            state.level_reference = reference
 
 type PleosConfigEntry = ConfigEntry[PleosVehicleCoordinator]
